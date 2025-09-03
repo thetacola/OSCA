@@ -2,6 +2,10 @@ package net.oijon.osca;
 
 import java.util.ArrayList;
 
+/**
+ * Creates an object that contains a list of strings, and a name that can be used inside
+ * strings as placeholders.
+ */
 public class Category {
 	String name;
 	ArrayList<String> values ;

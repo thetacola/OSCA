@@ -6,6 +6,10 @@ import java.util.regex.Pattern;
 import net.oijon.olog.Log;
 import net.oijon.osca.exception.InvalidRuleSyntaxException;
 
+/**
+ * Creates an object that can be used to change text based on a target, replacement,
+ * environment, and exception.
+ */
 public class Rule {
 	
 	static Log log = new Log(System.getProperty("user.home") + "/.osca");
@@ -255,6 +259,159 @@ public class Rule {
 	}
 	
 	/**
+	 * From the target, generate all possible metathesis outputs
+	 * @return All possible metathesis outputs from the Rule's target
+	 */
+	private ArrayList<String[]> generateMetathesisMappings() {
+		ArrayList<String[]> targetReplacementPairs = new ArrayList<String[]>();
+		ArrayList<String> possibleTargets = Category.generateMatchesFromCategoryList(categories, target);
+		for (int i = 0; i < possibleTargets.size(); i++) {
+			String reverse = possibleTargets.get(i);
+			StringBuilder reverser = new StringBuilder();
+			reverser.append(reverse);
+			reverser.reverse();
+			String[] newPair = {possibleTargets.get(i), reverser.toString()};
+			targetReplacementPairs.add(newPair);
+			// System.out.println("[Debug] - " + Arrays.toString(newPair));
+		}
+		return targetReplacementPairs;
+	}
+	
+	private ArrayList<String[]> generateManyToOneMappings() {
+		ArrayList<String[]> targetReplacementPairs = new ArrayList<String[]>();
+		ArrayList<String> possibleTargets = Category.generateMatchesFromCategoryList(categories, target);			
+		for (int i = 0; i < possibleTargets.size(); i++) {
+			String[] newPair = {possibleTargets.get(i), replacement};
+			targetReplacementPairs.add(newPair);
+		}
+		return targetReplacementPairs;
+	}
+	
+	/**
+	 * Processes all pairs when both the target and replacement have categories
+	 * @return All input-output pairs that match the rule
+	 */
+	private ArrayList<String[]> generateManyToManyMappings() {
+		ArrayList<String[]> targetReplacementPairs = new ArrayList<String[]>();
+		
+		// add bare pair, this'll be removed as it iterates
+		String[] barePair = {target, replacement};
+		
+		targetReplacementPairs.add(barePair);
+		
+		Category[] targetCategories = getCategoriesFromString(target);
+		Category[] replacementCategories = getCategoriesFromString(replacement);
+		
+		int loopNum;
+		if (targetCategories.length < replacementCategories.length) {
+			loopNum = targetCategories.length;
+		} else {
+			loopNum = replacementCategories.length;
+		}
+		
+		for (int i = 0; i < loopNum; i++) {
+			Category targetCat = targetCategories[i];
+			Category replacementCat = replacementCategories[i];
+			
+			ArrayList<String[]> newMappings = new ArrayList<String[]>();
+			ArrayList<String[]> removalList = new ArrayList<String[]>();
+			for (int j = 0; j < targetReplacementPairs.size(); j++) {
+				boolean changedAnything = false;
+				for (int k = 0; k < targetCat.values.size(); k++) {
+					int replacementIndex = k % replacementCat.values.size();
+					
+					String oldTarget = targetReplacementPairs.get(i)[0];
+					String oldReplacement = targetReplacementPairs.get(i)[1];
+					
+					String newTarget = oldTarget.replaceFirst(targetCat.name, targetCat.values.get(k));
+					String newReplacement = oldReplacement.replaceFirst(replacementCat.name, replacementCat.values.get(replacementIndex));
+					
+					if (!newTarget.equals(oldTarget) | !newReplacement.equals(oldReplacement)) {
+						changedAnything = true;
+					}
+					
+					String[] newPair = {newTarget, newReplacement};
+					//System.out.println("[Debug] - " + Arrays.toString(newPair));
+					newMappings.add(newPair);
+					
+				}
+				if (changedAnything) {
+					removalList.add(targetReplacementPairs.get(j));
+				}
+			}
+			
+			/**
+			 * breaks sometimes, should be fine to keep though
+			for (int j = 0; j < removalList.size(); j++) {
+				targetReplacementPairs.remove(removalList.get(j));
+			}
+			**/
+			
+			for (int j = 0; j < newMappings.size(); j++) {
+				targetReplacementPairs.add(newMappings.get(j));
+			}
+						
+		}
+		
+		return targetReplacementPairs;
+	}
+	
+	/**
+	 * Processes exceptions to the rule
+	 * @param targetReplacementPairs The previously generated target/replacement pairs
+	 */
+	private void processExceptions(ArrayList<String[]> targetReplacementPairs) {
+		ArrayList<String> allExps = new ArrayList<String>();
+		
+		if (countCategories(exception) == 0) {
+			allExps.add(exception);
+		} else {
+			allExps = Category.generateMatchesFromCategoryList(categories, exception);
+		}
+		
+		for (int i = 0; i < allExps.size(); i++) {
+			for (int j = 0; j < targetReplacementPairs.size(); j++) {
+				String newExp = allExps.get(i).replace("_", targetReplacementPairs.get(j)[0]);
+				exceptions.add(newExp);
+			}
+		}
+	}
+	
+	/**
+	 * Processes environments and turns rules into simple replacements
+	 * @param targetReplacementPairs All possible target/replacement pairs
+	 */
+	private void processEnvironment(ArrayList<String[]> targetReplacementPairs) {
+		// change ² environment to be compatible with env syntax
+		// change ² environment to be compatible with env syntax
+		ArrayList<String> allEnvs = new ArrayList<String>();
+		
+		if (environment.equals("²")) {
+			environment = "_²";
+		}
+		
+		if (countCategories(environment) == 0) {
+			allEnvs.add(environment);
+		} else {
+			allEnvs = Category.generateMatchesFromCategoryList(categories, environment);
+		}
+		
+		for (int i = 0; i < targetReplacementPairs.size(); i++) {
+			//System.out.println("[Debug] [Mapping] " + Arrays.toString(targetReplacementPairs.get(i)));
+			for (int j = 0; j < allEnvs.size(); j++) {
+				String targetWithEnv = allEnvs.get(j).replace("_", targetReplacementPairs.get(i)[0]);
+				targetWithEnv = targetWithEnv.replace("²", targetReplacementPairs.get(i)[0]);
+				String replacementWithEnv = allEnvs.get(j).replace("_", targetReplacementPairs.get(i)[1]);
+				replacementWithEnv = replacementWithEnv.replace("²", targetReplacementPairs.get(i)[0]);
+				
+				String[] newMapping = {targetWithEnv, replacementWithEnv};
+				mappings.add(newMapping);
+				//System.out.println("[Debug] [Mapping] - " + Arrays.toString(newMapping));
+			}
+		}
+	}
+	
+	/**
 	 * Generates the mappings between targets and replacements, attaches them to
 	 * their given environments, and handles gemination and metathesis.
 	 */
@@ -297,132 +454,23 @@ public class Rule {
 		 * ibb → ipapa
 		 * idb → itepa
 		 */
-		ArrayList<String[]> targetReplacementPairs = new ArrayList<String[]>();
-		ArrayList<String> allEnvs = new ArrayList<String>();
-		ArrayList<String> allExps = new ArrayList<String>();
+		ArrayList<String[]> targetReplacementPairs;
 		
 		if (replacement.equals("\\\\\\\\")) {
-			ArrayList<String> possibleTargets = Category.generateMatchesFromCategoryList(categories, target);
-			for (int i = 0; i < possibleTargets.size(); i++) {
-				String reverse = possibleTargets.get(i);
-				StringBuilder reverser = new StringBuilder();
-				reverser.append(reverse);
-				reverser.reverse();
-				String[] newPair = {possibleTargets.get(i), reverser.toString()};
-				targetReplacementPairs.add(newPair);
-				// System.out.println("[Debug] - " + Arrays.toString(newPair));
-			}
+			targetReplacementPairs = generateMetathesisMappings();
 		} else if (countCategories(target) == 0) {
-			// one-to-one
+			targetReplacementPairs = new ArrayList<String[]>();
 			String[] newPair = {target, replacement};
 			targetReplacementPairs.add(newPair);
 		} else if (countCategories(replacement) == 0) {
-			// many-to-one
-			ArrayList<String> possibleTargets = Category.generateMatchesFromCategoryList(categories, target);			
-			for (int i = 0; i < possibleTargets.size(); i++) {
-				String[] newPair = {possibleTargets.get(i), replacement};
-				targetReplacementPairs.add(newPair);
-			}
+			targetReplacementPairs = generateManyToOneMappings();
 		} else {
-			// many-to-many
-			
-			// add bare pair, this'll be removed as it iterates
-			String[] barePair = {target, replacement};
-			
-			targetReplacementPairs.add(barePair);
-			
-			Category[] targetCategories = getCategoriesFromString(target);
-			Category[] replacementCategories = getCategoriesFromString(replacement);
-			
-			int loopNum;
-			if (targetCategories.length < replacementCategories.length) {
-				loopNum = targetCategories.length;
-			} else {
-				loopNum = replacementCategories.length;
-			}
-			
-			for (int i = 0; i < loopNum; i++) {
-				Category targetCat = targetCategories[i];
-				Category replacementCat = replacementCategories[i];
-				
-				ArrayList<String[]> newMappings = new ArrayList<String[]>();
-				ArrayList<String[]> removalList = new ArrayList<String[]>();
-				for (int j = 0; j < targetReplacementPairs.size(); j++) {
-					boolean changedAnything = false;
-					for (int k = 0; k < targetCat.values.size(); k++) {
-						int replacementIndex = k % replacementCat.values.size();
-						
-						String oldTarget = targetReplacementPairs.get(i)[0];
-						String oldReplacement = targetReplacementPairs.get(i)[1];
-						
-						String newTarget = oldTarget.replaceFirst(targetCat.name, targetCat.values.get(k));
-						String newReplacement = oldReplacement.replaceFirst(replacementCat.name, replacementCat.values.get(replacementIndex));
-						
-						if (!newTarget.equals(oldTarget) | !newReplacement.equals(oldReplacement)) {
-							changedAnything = true;
-						}
-						
-						String[] newPair = {newTarget, newReplacement};
-						//System.out.println("[Debug] - " + Arrays.toString(newPair));
-						newMappings.add(newPair);
-						
-					}
-					if (changedAnything) {
-						removalList.add(targetReplacementPairs.get(j));
-					}
-				}
-				
-				/**
-				 * breaks sometimes, should be fine to keep though
-				for (int j = 0; j < removalList.size(); j++) {
-					targetReplacementPairs.remove(removalList.get(j));
-				}
-				**/
-				
-				for (int j = 0; j < newMappings.size(); j++) {
-					targetReplacementPairs.add(newMappings.get(j));
-				}
-				
-			}
-			
+			targetReplacementPairs = generateManyToManyMappings();
 		}
 		
-		if (environment.equals("²")) {
-			environment = "_²";
-		}
+		processExceptions(targetReplacementPairs);
+		processEnvironment(targetReplacementPairs);
 		
-		if (countCategories(environment) == 0) {
-			allEnvs.add(environment);
-		} else {
-			allEnvs = Category.generateMatchesFromCategoryList(categories, environment);
-		}
-		
-		if (countCategories(exception) == 0) {
-			allExps.add(exception);
-		} else {
-			allExps = Category.generateMatchesFromCategoryList(categories, exception);
-		}
-		
-		for (int i = 0; i < allExps.size(); i++) {
-			for (int j = 0; j < targetReplacementPairs.size(); j++) {
-				String newExp = allExps.get(i).replace("_", targetReplacementPairs.get(j)[0]);
-				exceptions.add(newExp);
-			}
-		}
-		
-		for (int i = 0; i < targetReplacementPairs.size(); i++) {
-			//System.out.println("[Debug] [Mapping] " + Arrays.toString(targetReplacementPairs.get(i)));
-			for (int j = 0; j < allEnvs.size(); j++) {
-				String targetWithEnv = allEnvs.get(j).replace("_", targetReplacementPairs.get(i)[0]);
-				targetWithEnv = targetWithEnv.replace("²", targetReplacementPairs.get(i)[0]);
-				String replacementWithEnv = allEnvs.get(j).replace("_", targetReplacementPairs.get(i)[1]);
-				replacementWithEnv = replacementWithEnv.replace("²", targetReplacementPairs.get(i)[0]);
-				
-				String[] newMapping = {targetWithEnv, replacementWithEnv};
-				mappings.add(newMapping);
-				//System.out.println("[Debug] [Mapping] - " + Arrays.toString(newMapping));
-			}
-		}
 	}
 	
 	/**
@@ -506,23 +554,13 @@ public class Rule {
 	}
 	
 	/**
-	 * Takes a string, runs it through the rule, and gives an output.
-	 * @param input The string to run through the rule
-	 * @return The output of the rule on the given string
+	 * Parses exceptions in the input, and replaces them with a placeholder
+	 * @param input The string to have exceptions replaced
+	 * @param expValues The ArrayList pairing placeholders and their real values
+	 * @return The input, with placeholders replacing exceptions
 	 */
-	public String parse(String input) {
-		// add whitespace to mark boundaries
-		
-		String output = " " + input + " ";
-		String suffix = "";
-		int firstGlossChar = output.indexOf('‣');
-		if (firstGlossChar != -1) {
-			suffix = output.substring(firstGlossChar);
-			output = output.substring(0, firstGlossChar - 1) + " ";
-		}
-		
-		ArrayList<String[]> newValues = new ArrayList<String[]>();
-		ArrayList<String[]> expValues = new ArrayList<String[]>();
+	private String parseExceptions(String input, ArrayList<String[]> expValues) {
+		String output = input;
 		
 		int numExpFound = 0;
 		for (int i = 0; i < exceptions.size(); i++) {
@@ -535,7 +573,7 @@ public class Rule {
 			while (!foundAll) {
 				int index = output.indexOf(exceptions.get(i), lastIndex);
 				if (index > -1) {
-					String expPlaceholder = "‣‣E" + numExpFound + "‣‣";
+					String expPlaceholder = "‣E" + numExpFound + "‣";
 					numExpFound++;
 					lastIndex = index + expPlaceholder.length();
 					output = output.replaceFirst(exceptions.get(i), expPlaceholder);
@@ -547,6 +585,18 @@ public class Rule {
 			}
 		}
 		
+		return output;
+	}
+	
+	/**
+	 * Replaces targets with placeholders for replacements
+	 * @param input The input to replace targets in
+	 * @param newValues The array containing placeholders and their values
+	 * @return The input string with placeholders for targets
+	 */
+	private String parseTargetReplacements(String input, ArrayList<String[]> newValues) {
+		String output = input;
+		
 		for (int i = 0; i < mappings.size(); i++) {
 			//System.out.println("[Debug] [Mapping] " + Arrays.toString(mappings.get(i)));
 			boolean foundAll = false;
@@ -557,6 +607,7 @@ public class Rule {
 				
 				//System.out.print("Target " + ourTarget);
 				
+				// Trim out erroneous leading and trailing wildcards, as they do nothing
 				while (ourTarget.charAt(0) == '…') {
 					ourTarget = ourTarget.substring(1);
 				}
@@ -606,20 +657,41 @@ public class Rule {
 			}
 		}
 		
+		return output;
+	}
+	
+	/**
+	 * Takes a string, runs it through the rule, and gives an output.
+	 * @param input The string to run through the rule
+	 * @return The output of the rule on the given string
+	 */
+	public String parse(String input) {
+		// add whitespace to mark boundaries
+		String output = input;
+		String suffix = "";
+		
+		int firstGlossChar = output.indexOf('‣');
+		if (firstGlossChar != -1) {
+			suffix = output.substring(firstGlossChar);
+			output = output.substring(0, firstGlossChar - 1) + " ";
+		}
+		
+		// add whitespace
+		output = " " + output + " ";
+		
+		ArrayList<String[]> newValues = new ArrayList<String[]>();
+		output = parseExceptions(output, newValues);
+		output = parseTargetReplacements(output, newValues);
+		
 		for (int i = 0; i < newValues.size(); i++) {
 			//System.out.println("[Debug] [Output] - " + newValues.get(i)[0] + "→" + newValues.get(i)[1]);
 			output = output.replace(newValues.get(i)[0], newValues.get(i)[1]);
 		}
 		
-		for (int i = 0; i < expValues.size(); i++) {
-			output = output.replace(expValues.get(i)[0], expValues.get(i)[1]);
-		}
-		
-		output = output + suffix;
-		
 		// remove added whitespace
 		output = output.substring(1);
 		output = output.substring(0, output.length() - 1);
+		output = output + suffix;
 		
 		return output;
 	}

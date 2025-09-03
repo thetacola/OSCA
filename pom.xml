@@ -2,9 +2,10 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>net.oijon</groupId>
   <artifactId>OSCA</artifactId>
-  <version>0.1.0</version>
+  <version>0.1.1</version>
   <name>OSCA</name>
-  <description>A sound change applier in Java.</description>
+  <description>Oijon Sound Change Applier, an SCA for Java. </description>
+  <url>https://oijon.net/osca</url>
   <scm>
 		<connection>scm:git:git@github.com/thetacola/OSCA.git</connection>
 		<developerConnection>scm:git:git@github.com:thetacola/OSCA.git</developerConnection>
@@ -70,7 +71,7 @@
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-source-plugin</artifactId>
-				<version>3.3.1</version>
+				<version>3.2.1</version>
 				<executions>
 					<execution>
 						<id>attach-sources</id>
