@@ -1,4 +1,6 @@
 # OSCA
+[![Maven Central](https://img.shields.io/maven-central/v/net.oijon/OSCA?style=plastic)](https://search.maven.org/artifact/net.oijon/OSCA)
+
 A sound change applier in Java. OSCA should be compatible with SCA² by zompist, which can be found at https://www.zompist.com/sca2.html. That being said, full compatibility cannot be 100% guaranteed, so use with caution!
 
 ## Syntax
